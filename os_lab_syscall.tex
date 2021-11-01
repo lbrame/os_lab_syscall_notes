@@ -1,0 +1,1248 @@
+\documentclass{article}
+
+\usepackage{amsmath}
+\usepackage[utf8]{inputenc}
+\usepackage[english]{babel}
+\usepackage{hyperref}
+\usepackage{graphicx}
+\usepackage{minted}
+\usepackage{tikz}
+
+\hypersetup{%
+    pdfborder = {0 0 0}
+}
+
+\title{A rundown of POSIX syscalls \\
+\large and other useful system programming functions \\
+AY 2020-2021, Operating Systems, Università di Verona}
+\author{Luca Bramè}
+\date{}
+
+\renewcommand*\contentsname{Table of contents}
+
+\begin{document}
+\maketitle
+
+\tableofcontents
+\newpage
+
+\section{Filesystem}
+
+\subsection{\texttt{open}}
+
+\begin{minted}{c}
+int open(const char *pathname, int flags, .../*mode_t mode */);
+\end{minted}
+
+Either opens, or creates and then opens, a file.
+
+On success, it returns the \textit{file descriptor} of the file. On failure, it returns -1.
+
+\texttt{flags} is a bit mask for one of more of the following constants (that should be XORED) and it specifies the \textbf{access mode} for the file:
+
+\begin{center}
+\begin{tabular}{ |c|c| }
+    \hline \textbf{Flag} & \textbf{Description} \\
+    \hline
+    \texttt{O\_RDONLY} & Opens for reading only \\
+    \texttt{O\_WRONLY} & Opens for writing only \\
+    \texttt{O\_RDWR} & Opens for reading and writing \\
+    \hline
+    \texttt{O\_TRUNC} & Truncate existing file to zero length \\
+    \texttt{O\_APPEND} & Writes are always appended to the end of the file \\
+    \hline
+    \texttt{O\_CREAT} & Create file if it doesn't already exist \\
+    \texttt{O\_EXCL} & With \texttt{O\_CREAT}, ensure this call creates the file \\
+    \hline 
+\end{tabular}
+\end{center}
+
+\textit{Memo}: \texttt{O\_EXCL} stands for "Exclusive use flag".
+
+\texttt{mode} is a bit mask for one or more of the following constants and it specifies \textbf{permissions} for the new file:
+
+\begin{center}
+\begin{tabular}{ |c|c| }
+    \hline \textbf{Flag} & \textbf{Description} \\
+    \hline
+    \texttt{S\_IRWXU} & user has read, write, and execute permission \\
+    \texttt{S\_IRUSR} & user has read permission \\
+    \texttt{S\_IWUSR} & user has write permission \\
+    \texttt{S\_IXUSR} & user has execute permission \\
+    \hline
+    \texttt{S\_IRWXG} & group has read, write, and execute permission \\
+    \texttt{S\_IRGRP} & group has read permission \\
+    \texttt{S\_IWGRP} & group has write permission \\
+    \texttt{S\_IXGRP} & group has execute permission \\
+    \hline
+    \texttt{S\_IRWXO} & others have read, write, and execute permission \\
+    \texttt{S\_IROTH} & others have read permission \\
+    \texttt{S\_IWOTH} & others have write permission \\
+    \texttt{S\_IXOTH} & others have execute permission \\
+    \hline 
+\end{tabular}
+\end{center}
+
+Useful things to memorize:
+
+\begin{itemize}
+    \item \texttt{R} = Read permission
+    \item \texttt{W} = Write permission
+    \item \texttt{X} = Execute permission
+    \item Leading \texttt{U} = User
+    \item \texttt{USR} = User
+    \item Leading \texttt{G} = Group
+    \item \texttt{GRP} = Group
+    \item Leading \texttt{O} = Other
+    \item \texttt{OTH} = Other
+\end{itemize}
+
+\subsection{\texttt{read}}
+
+\begin{minted}{c}
+ssize_t read(int fd, void *buf, size_t count);
+\end{minted}
+
+Reads data from a file descriptor.
+
+Returns number of bytes read on success, -1 on failure.
+
+\texttt{count} = max number of bytes to read from file descriptor \texttt{fd}.
+
+\texttt{buf} = Address of memory buffer into which read input data is stored.
+
+
+\subsection{\texttt{write}}
+
+\begin{minted}{c}
+ssize_t write(int fd, void *buf, size_t count);
+\end{minted}
+
+Write data to a file descriptor.
+
+Returns number of bytes written on success, -1 on failure.
+
+\texttt{count} = Number of bytes of buffer pointed by \texttt{buf} that has to be written to file desciptor referred by \texttt{fd}
+
+
+\subsection{\texttt{lseek}}
+
+\begin{minted}{c}
+off_t lseek(int fd, off_t offset, int whence);
+\end{minted}
+
+Adjusts offset location of an open file.
+
+Returns offset location, or -1 on failure.
+
+\texttt{fd} = File desciptor of open file
+
+\texttt{offset} = Value in bytes
+
+\texttt{whence} = Base point from which \texttt{offset} is interpreted
+
+\begin{minted}{c}
+// first byte of the file.
+off_t current = lseek(fd1, 0, SEEK_SET);
+// last byte of the file.
+off_t current = lseek(fd2, -1, SEEK_END);
+// 10th byte past the current offset location of the file.
+off_t current = lseek(fd3, -10, SEEK_CUR);
+// 10th byte after the current offset location of the file.
+off_t current = lseek(fd4, 10, SEEK_CUR);
+\end{minted}
+
+
+\subsection{\texttt{close}}
+
+\begin{minted}{c}
+int close(int fd);
+\end{minted}
+
+Closes an open file descriptor.
+
+
+\subsection{\texttt{unlink}}
+
+\begin{minted}{c}
+int unlink(const char *pathname);
+\end{minted}
+
+Removes a link to a file. It also removes the file itself if that is the last link to a file. (There can be more than one link to a file because of hard links: every hard link pointing to that file needs to be unlinked from the filesystem for that file to be removed.)
+
+\subsection{\texttt{stat}, \texttt{lstat}, \texttt{fstat}}
+
+\begin{minted}{c}
+int stat(const char *pathname, struct stat *statbuf);
+int lstat(const char *pathname, struct stat *statbuf);
+int fstat(int fd, struct stat *statbuf);
+\end{minted}
+
+Retrieve information about a file.
+
+\begin{itemize}
+    \item \texttt{stat} returns information about a named file
+    \item \texttt{lstat} returns information about a symbolic link 
+    \item \texttt{fstat} like \texttt{stat}, but uses fd instead of pathname 
+\end{itemize}
+
+These syscalls return a stat structure in the buffer pointed to by \texttt{statbuf}:
+
+\begin{minted}{c}
+struct stat {
+    dev_t st_dev; // IDs of device on which file resides.
+    ino_t st_ino; // I-node number of file.
+    mode_t st_mode; // File type and permissions.
+    nlink_t st_nlink; // Number of (hard) links to file.
+    uid_t st_uid; // User ID of file owner.
+    gid_t st_gid; // Group ID of file owner.
+    dev_t st_rdev; // IDs for device special files.
+    off_t st_size; // Total file size (bytes).
+    blksize_t st_blksize; // Optimal block size for I/O (bytes).
+    blkcnt_t st_blocks; // Number of (512B) blocks allocated.
+    time_t st_atime; // Time of last file access.
+    time_t st_mtime; // Time of last file modification.
+    time_t st_ctime; // Time of last status change.
+};
+\end{minted}
+
+\texttt{st\_mode} is a bit mask that identifies the file type and specifies the file permissions. The file type can be extracted by applying a logical AND with the constant \texttt{S\_IFMT} and comparing the result with one of the following constants. Alternatively, the corresponding "Test macro" can be ran on the \texttt{statbuf.st\_mode} entry to get an equivalent result.
+
+\begin{center}
+\begin{tabular}{ |c|c|c| }
+    \hline \textbf{Constant} & \textbf{Test macro} & \textbf{File type} \\
+    \hline
+    \texttt{S\_ISREG} & \texttt{S\_ISREG} & Regular file \\
+    \texttt{S\_IFDIR} & \texttt{S\_ISDIR()} & Directory \\
+    \texttt{S\_IFCHR} & \texttt{S\_ISCHR()} & Character device \\
+    \texttt{S\_ISBLK} & \texttt{S\_IFBLK()} & Block device \\
+    \texttt{S\_IFIFO} & \texttt{S\_ISIFO()} & FIFO or pipe \\
+    \texttt{S\_IFSOCK} & \texttt{S\_ISSOCK()} & Socket \\
+    \texttt{S\_IFLNK} & \texttt{S\_ISLNK()} & Symbolic link \\
+    \hline 
+\end{tabular}
+\end{center}
+
+\subsection{\texttt{access}}
+
+\begin{minted}{c}
+int access(const char *pathname, int mode):
+\end{minted}
+
+Checks accessibility of a file based on a process's real user ID and group ID
+
+Returns 0 on success, -1 on failure
+
+If \texttt{pathname} is a symlink, \texttt{access} dereferences it.
+
+\texttt{mode} is a bit mask that may contain the following constants:
+
+\begin{center}
+\begin{tabular}{ |c|c| }
+    \hline \textbf{Constant} & \textbf{Description} \\
+    \hline
+    \texttt{F\_OK} & Does the file exist? \\
+    \texttt{R\_OK} & Can the file be read? \\
+    \texttt{W\_OK} & Can the file be written? \\
+    \texttt{X\_OK} & Can the file be executed? \\
+    \hline \end{tabular}
+\end{center}
+
+
+\subsection{\texttt{chmod} and \texttt{fchmod}}
+
+\begin{minted}{c}
+#include <sys/stat.h>
+
+// Example of mode with owner-write on and others-read off
+mode_t mode = (sb.st_mode | S_IWUSR) & ~S_IROTH;
+
+int chmod(const char *pathname, mode_t mode);
+\end{minted}
+
+\begin{minted}{c}
+#define _BSD_SOURCE
+#include <sys/stat.h>
+
+// Example of mode with owner-write on and others-read off
+mode_t mode = (sb.st_mode | S_IWUSR) & ~S_IROTH;
+
+int fchmod(int fd, mode_t mode);
+\end{minted}
+
+Change the permission of a file.
+
+Both return 0 on success, -1 on failure.
+
+\texttt{chmod} changes the permissions of file referenced by \texttt{pathname}, while \texttt{fchmod} accepts the file descriptor of an open file.
+
+\texttt{mode} accepts the same constants as \texttt{open()}.
+
+
+
+\subsection{\texttt{mkdir}}
+
+
+\begin{minted}{c}
+int mkdir(const char *pathname, mode_t mode);
+\end{minted}
+
+Creates a new directory. If this pathname already exists, it fails with error \texttt{EEXIST}.
+\subsection{\texttt{rmdir}}
+
+\begin{minted}{c}
+int rmdir(const char *pathname);
+\end{minted}
+
+Removes a directory. The target directory must be empty, if it isn't, \texttt{rmdir} fails. If the path links to a symbolic link, it fails with \texttt{ENOTDIR.}
+
+
+\subsection{\texttt{opendir}}
+
+\begin{minted}{c}
+DIR *opendir(const char *dirpath);
+\end{minted}
+
+Opens a directory. If it succeds, it returns the directory stream handler. It returns \texttt{NULL} on failure.
+
+After \texttt{opendir} returns, the directory stream \texttt{DIR *} is positioned at the first entry in the directory list.
+
+
+\subsection{\texttt{closedir}}
+
+\begin{minted}{c}
+int closedir(DIR *dirp);
+\end{minted}
+
+Closes the open directory stream referred to by \texttt{dirp} and it frees the resources used by the stream. It returns 0 on success and -1 on failure.
+
+
+\subsection{\texttt{readdir}}
+
+\begin{minted}{c}
+struct dirent *readdir(DIR *dirp);
+\end{minted}
+
+Reads the content of a directory.
+
+It returns a pointer to an allocated structure describing the next directory entry, or NULL on end-of-directory error.
+
+Every time it's called, it reads the next entry from the directory stream referred to by \texttt{dirp}. Each entry is a struct defined as follows:
+
+\begin{minted}{c}
+struct dirent {
+    ino_t d_ino;    // File i-node number.
+    unsigned char d_type;   // Type of file.
+    char d_name[256];   // Null-terminated name of file.
+    //...
+} \end{minted}
+
+The value returned in \texttt{d\_type} can be one of the following macros:
+
+\begin{center}
+\begin{tabular}{ |c|c| }
+    \hline \textbf{Constant} & \textbf{File type} \\ \hline \texttt{DT\_BLK} & block device \\ \hline
+    \texttt{DT\_CHR} & character device \\ \hline 
+    \texttt{DT\_DIR} & directory \\ \hline 
+    \texttt{DT\_FIFO} & named pipe (FIFO) \\ \hline 
+    \texttt{DT\_LNK} & symbolic link \\ \hline 
+    \texttt{DT\_REG} & regular file \\ \hline 
+    \texttt{DT\_SOCK} & UNIX socket \\ \hline 
+\end{tabular}
+\end{center}
+
+
+\section{Processes}
+
+\subsection{\texttt{getpid}}
+
+\begin{minted}{c}
+pid_t getpid(void);
+\end{minted}
+
+Returns PID of calling process. It's always successful.
+
+\texttt{pid\_t} is an integer type designated to store process id's.
+
+
+\subsection{\texttt{getuid} and \texttt{geteuid}}
+
+\begin{minted}{c}
+uid_t getuid(void); // Real user ID
+uid_t geteuid(void); // Effective user ID
+\end{minted}
+
+\begin{itemize}
+    \item \texttt{getuid} returns the \textit{real} user ID of the calling process
+    \item \texttt{geteuid} returns the \textit{effective} user ID of the calling process
+\end{itemize}
+
+They are always successful.
+
+
+\subsection{\texttt{getgid} and \texttt{getegid}}
+
+\begin{minted}{c}
+uid_t getgid(void); // Real group ID
+uid_t getegid(void); // Effective group ID
+\end{minted}
+
+\begin{itemize}
+    \item \texttt{getgid} returns the \textit{real} group ID of the calling process
+    \item \texttt{getegid} returns the \textit{effective} group ID of the calling process
+\end{itemize}
+
+They are always successful.
+
+
+\subsection{\texttt{getenv}}
+
+\begin{minted}{c}
+char *getenv(const char *name);
+\end{minted}
+
+Given a variable name, returns a pointer to string of the associated value in the process's environment. It returns \texttt{NULL} if there is no environment variable with that specified name.
+
+
+\subsection{\texttt{setenv}}
+
+\begin{minted}{c}
+int setenv(const char *name, const char *value, int overwrite);
+\end{minted}
+
+Adds \texttt{NAME=VALUE} to the environment, unless that same pair already exists and \texttt{overwrite} is 0. If a pair with the same key already exists, the pair gets overwritten. If \texttt{overwrite} is nonzero, the environment gets changed no matter what.
+
+\subsection{\texttt{unsetenv}}
+
+\begin{minted}{c}
+int unsetenv(const char *name);
+\end{minted}
+
+Removes the variable identified by the string \texttt{name} from the environment.
+
+
+\subsection{\texttt{getcwd}}
+
+\begin{minted}{c}
+char *getcwd(char *cwdbuf, size_t size);
+\end{minted}
+
+Used to retrieve a process's current working directory.
+
+On success, it returns a pointer to \texttt{cwdbuf}. If the pathname for che cwd exceeds \texttt{size} bytes, it returns 0.
+
+
+\subsection{\texttt{chdir}}
+
+\begin{minted}{c}
+int chdir(const char *pathname);
+\end{minted}
+
+Changes the process's current working directory to the relative or absolute pathname in \texttt{pathname}.
+
+Returns 0 on success, -1 on error.
+
+
+\subsection{\texttt{fchdir}}
+
+\begin{minted}{c}
+int fchdir(int fd);
+\end{minted}
+
+Same as \texttt{chdir}, but the directory is specified via a file descriptor.
+
+Returns 0 on success, -1 on error.
+
+
+\subsection{\texttt{dup}}
+
+\begin{minted}{c}
+int dup(int oldfd);
+\end{minted}
+
+Takes an existing file descriptor and returns a new fd that refers to the same open fd. The new fd will be the lowest unused fd.
+
+Returns -1 on error.
+
+
+\subsection{\texttt{\_exit}}
+
+\begin{minted}{c}
+void _exit(int status);
+\end{minted}
+
+Terminates calling process successfully. Cannot fail.
+
+First bit of \texttt{status} defines \textit{termination} status of the process.
+
+\begin{itemize}
+    \item 0 $\rightarrow$ Process terminated \textbf{successfully}
+    \item nonzero $\rightarrow$ Process terminated \textbf{unsuccessfully}
+\end{itemize}
+
+It should be noted that using library function \texttt{exit()} is more common than calling syscall \texttt{\_exit()}, since the former calls exit handlers and flushes \texttt{stdio} stream buffers before calling \texttt{\_exit()}.
+
+Additionally, calling \texttt{return STATUS} works the same way, and falling off the end of \texttt{main()} is equivalent to \texttt{return 0} in C99, but it's undefined behaviour otherwise.
+
+
+\subsection{\texttt{atexit}}
+
+\begin{minted}{c}
+int atexit(void (*func)(void));
+\end{minted}
+
+Defines exit handlers for current process.
+
+\texttt{atexit} adds the function pointer \texttt{func} to a list of functions that are called during process termination, \textbf{as long as the process is terminated gracefully}.
+
+Multiple exit handlers are called in \textit{reverse order} of registration.
+
+
+\subsection{\texttt{fork}}
+
+\begin{minted}{c}
+pid_t fork(void);
+\end{minted}
+
+Creates a new process.
+
+Child process is an almost exact replica of calling (parent) process. Child receives parent's fds and attached shmem segments.
+
+\textbf{In parent:} returns PID of child process on success or -1 on error.
+
+\textbf{In child:} always returns 0.
+
+
+\subsection{\texttt{getppid}}
+
+\begin{minted}{c}
+pid_t getppid(void);
+\end{minted}
+
+Always successfully returns PID of parent process.
+
+
+\subsection{\texttt{wait}}
+
+\begin{minted}{c}
+pid_t wait(int *status);
+\end{minted}
+
+Waits for one of the children of the calling process to terminate.
+
+\begin{itemize}
+    \item If calling process have no unwaited-for children, \texttt{wait} returns -1 and sets errno to \texttt{ECHILD} (No child processes).
+    \item If no child has yet terminated, \texttt{wait} blocks the calling process until a child terminates. If a child has already terminated, \texttt{wait} returns.
+    \item If \texttt{status} is not \texttt{NULL}, information about child is stored in the int pointed by \texttt{status}.
+\end{itemize}
+
+
+\subsection{\texttt{waitpid}}
+
+\begin{minted}{c}
+pid_t waitpid(pid_t pid, int *status, int options);
+\end{minted}
+
+Blocks the calling process until child specified by \texttt{pid} has changed state.
+
+\texttt{status} is same as \texttt{wait}.
+
+Value of \texttt{pid} depends on what child process we want to wait for:
+
+\begin{itemize}
+    \item \texttt{pid} $\ge$ 0, wait for the child whose PID equals to \texttt{pid}
+    \item \texttt{pid} = 0, wait for any child in the same calling process's group
+    \item \texttt{pid} < -1, wait for any child in the process group \texttt{|pid|}
+    \item \texttt{pid} = -1, wait for any child
+\end{itemize}
+
+\texttt{options} is an OR of:
+
+\begin{itemize}
+    \item \texttt{WUNTRACED}, Return when child stopped by signal or terminates
+    \item \texttt{WCONTINUED}, Return when a \texttt{SIGCONT} signal has resumed execution of a child
+    \item \texttt{WNOHANG}, Non-blocking: return immediately if no child has changed state, do not wait. Returns 0.
+    \item \texttt{0}, Wait only for terminated children.
+\end{itemize}
+
+To gather more information about the termination status of a process, various macros can be ran on \texttt{status}.
+
+
+\begin{center}
+\begin{tabular}{ |c|c| }
+    \hline \textbf{Macro} & \textbf{Description} \\
+    \hline
+    \texttt{WIFEXITED} & Returns true if child exited normally \\
+    \texttt{WEXITSTATUS} & Returns exit status of child \\
+    \texttt{WIFSIGNALED} & Returns true if the child was killed by a signal \\
+    \texttt{WTERMSIG} & Returns number of signal that caused the process to terminate \\
+    \texttt{WIFSTOPPED} & Returns true if child process was stopped \\
+    \texttt{WSTOPSIG} & Returns number of signal that stopped the process \\
+    \texttt{WIFCONTINUED} & Returns true if child was resumed by \texttt{SIGCONT} \\
+    \hline 
+\end{tabular}
+\end{center}
+
+
+\subsection{\texttt{exec}}
+
+\begin{minted}{c}
+#include <unistd.h>
+// None of the following returns on success, all return -1 on error.
+int execl (const char *path, const char *arg, ... ); // ... variadic functions
+int execlp(const char *path, const char *arg, ... );
+int execle(const char *path, const char *arg, ... , char *const envp[]);
+int execv (const char *path, char *const argv[]);
+int execvp(const char *path, char *const argv[]);
+int execve(const char *path, char *const argv[], char *const envp[]);
+\end{minted}
+
+Replaces the current process image with a new process image.
+
+Here's how to distinguish what various \texttt{exec} family functions do:
+
+\begin{itemize}
+    \item Takes \texttt{pathname} as path by default. If it contains a \textbf{p}, it accepts the \textbf{filename} instead.
+    \item If it contains a \textbf{l} (list), \texttt{argv[]} is a \textbf{list}.
+    \item If it contains a \textbf{v} (vector), \texttt{argv[]} is an \textbf{array}. 
+    \item Inherits the caller's environment by default. If it contains a \textbf{e} (environment), it expects the new environment to be defined in an \textbf{array}.
+\end{itemize}
+
+\textbf{NB:} Both \texttt{argv} and \texttt{envp} are NULL-terminated! These lists and arrays must always be terminated with \texttt{(char *)NULL}.
+
+The first item of \texttt{argv} is the new program.
+
+These functions only return anything on failure. They do not return anything on success.
+
+
+\section{System V IPCs}
+
+There are two implementations of Inter-Process Communication: System V and POSIX. We shall focus on System V's implementation.
+
+\subsection{IPC operations in short}
+
+\begin{center}
+\begin{tabular}{ |c|c|c|c| }
+    \hline \textbf{Interface} & \textbf{msq} & \textbf{sem} & \textbf{shmem} \\ \hline
+    \textbf{Header file} & \texttt{<sys/msg.h>} & \texttt{<sys/sem.h>} & \texttt{<sys/shm.h>} \\ \hline
+    \textbf{Data structure} & \texttt{msqid\_ds} & \texttt{semid\_ds} & \texttt{shimd\_ds} \\ \hline
+    \textbf{Create/Open} & \texttt{msgget(...)} & \texttt{semget(...)} & \texttt{shmget(...)} \\ \hline
+    \textbf{Close} & (none) & (none) & \texttt{shmdt(...)} \\ \hline
+    \textbf{Control Ops.} & \texttt{msgctl(...)} & \texttt{semctl(...)} & \texttt{shmctl(...)} \\ \hline
+    \textbf{Performing IPC} & \multicolumn{1}{p{2cm}|}{\texttt{msgsnd(...)} \newline \texttt{msgrcv(...)}} & \multicolumn{1}{p{2cm}|}{\texttt{semop(...)} \newline To test/adjust} &  \multicolumn{1}{p{2cm}|}{access memory in shared region} \\ \hline
+\end{tabular}
+\end{center}
+
+\begin{itemize}
+    \item \textbf{IPC Key}: Integer value, analogous to a filename, used to uniquely identify an instance of an IPC object on a running system. Used in \texttt{get} system calls.
+    \item \textbf{IPC Identifier}: Integer value, analogous to a file descriptor. Used in all subsequent system calls.
+    \item \texttt{get} \textbf{system calls}: Translate an IPC Key into an IPC Identifier. It creates a new IPC object if no IPC object with the provided key is present, while it simply returns the relevant identifier if an IPC object with such key is found.
+\end{itemize}
+
+\subsection{Keys}
+
+\subsubsection{\texttt{ftok}}
+
+\begin{minted}{c}
+key_t ftok(char *pathname, int proj_id);
+\end{minted}
+
+Converts a \texttt{pathname} and a project ID into a System V IPC key. Only the last 8 bits of \texttt{proj\_id} are actually used.
+
+\subsection{Data structures}
+
+\subsubsection{\texttt{ipc\_perm}}
+
+The kernel maintains specific data structures for each type of IPCs. Every IPC has one instance of its kind of data structure associated to it. This data structure contains specific information about that particular IPC object. Each of these different data structures, however, contains the common data structure \texttt{ipc\_perm}, whose role is to hold relevant permissions:
+
+\begin{minted}{c}
+struct ipc_perm {
+    key_t __key; /* Key, as supplied to ’get’ call */
+    uid_t uid; /* Owner’s user ID */
+    gid_t gid; /* Owner’s group ID */
+    uid_t cuid; /* Creator’s user ID */
+    gid_t cgid; /* Creator’s group ID */
+    unsigned short mode; /* Permissions */
+    unsigned short __seq; /* Sequence number */
+};
+\end{minted}
+
+\subsection{Semaphores}
+
+Semaphores are a construct to implement mutual exclusion in order to let processes synchronize their actions to ensure a critical section only ever gets accessed by one process at a time. Some resources must never be accessed or modified concurrently, as that would cause corruption: this is the reason why semaphores (or other forms of mutual exclusion) often need to be included in programs that rely on multiple concurrent processes.
+
+Semaphores are kernel-maintained values that get modified by OS-provided primitives before performing critical actions.
+
+\subsubsection{\texttt{semget}}
+
+\begin{minted}{c}
+int semget(key_t key, int nsems, int semflg);
+\end{minted}
+
+Creates a new semaphore set or obtains the identifier of an existing one.
+
+Returns semaphore set identifier on success, -1 on failure.
+
+\texttt{key}: IPC key,
+
+\texttt{nsems}: Number of semaphores in set
+
+\texttt{semflg}: Bit mask that specifies the permissions (see \texttt{open()}). The following constants can also be ORed in:
+
+\begin{itemize}
+    \item \texttt{IPC\_CREAT}: If no semaphore set with \texttt{key} exists, create one.
+    \item \texttt{IPC\_EXCL}: Fail if \texttt{IPC\_CREAT} is being used and a semaphore set with \texttt{key} already exists.
+\end{itemize}
+
+
+\subsubsection{\texttt{semctl}}
+
+\begin{minted}{c}
+int semctl(int semid, int semnum, int cmd, ... /* union semun arg */);
+\end{minted}
+
+Performs operations on a whole semaphore set or on a single semaphore contained in it.
+
+\texttt{semid}: ID of semaphore set to run command on.
+
+\texttt{semnum}: Number of semaphore in set to run command on. \texttt{0} for whole set.
+
+\texttt{cmd}: Control operation to run.
+
+\texttt{union semun arg}: Required by some operations. Relies on the union \texttt{semun}.
+
+\begin{minted}{c}
+union semun {
+    int val;
+    struct semid_ds * buf;
+    unsigned short * array;
+};
+\end{minted}
+
+\texttt{cmd} can accept one of these constants:
+
+\begin{itemize}
+    \item \texttt{IPC\_RMID}: Removes a semaphore set. Awakens blocked processes and sets \texttt{errno} to \texttt{EIDRM} (Identifier removed).
+    \item \texttt{IPC\_STAT}: Copy \texttt{semid\_ds} to \texttt{arg.buf}
+    \item \texttt{IPC\_SET}: Update fields in \texttt{semid\_ds} using values from buffer pointed by \texttt{arg.buf}
+    \item \texttt{SETVAL}: Value of \texttt{semnum}-th semaphore in set initialized to \texttt{arg.val}
+    \item \texttt{GETVAL}: Make \texttt{semctl} return value of the \texttt{semnum}-th semaphore in the set
+    \item \texttt{SETALL}: Initialize all semaphores in the set to values in \texttt{arg.array}
+    \item \texttt{GETALL}: Copy values of all semaphores in set to \texttt{arg.array}
+    \item \texttt{GETPID}: Return PID of last process to perform a \texttt{semop} on \texttt{semnum}-th semaphore
+    \item \texttt{GETNCNT}: Return number of processes waiting for value of \texttt{semnum}-th semaphore to increase
+    \item \texttt{GETZCNT}: Return number of processes waiting for value of \texttt{semnum}-th semaphore to become 0.
+\end{itemize}
+
+
+\subsubsection{\texttt{semop}}
+
+\begin{minted}{c}
+int semop(int semid, struct sembuf *sops, unsigned int nsops);
+\end{minted}
+
+Performs one or more operations (\texttt{wait} (P) and \texttt{signal} (V)) on semaphores.
+
+Returns 0 on success, -1 on failure.
+
+\texttt{sops}: Pointer to array that contains sorted sequence of operations to be performed atomically
+
+\texttt{nsops}: Size of array pointed to by \texttt{sops}
+
+The \texttt{sops} array contains structures that are structured like the following:
+
+\begin{minted}{c}
+struct sembuf {
+    unsigned short sem_num; /* Semaphore number */
+    short sem_op; /* Operation to be performed */
+    short sem_flg; /* Operation flags */
+};
+\end{minted}
+
+\texttt{sem\_op} refers to the operation to be performed and can be:
+
+\begin{itemize}
+    \item \texttt{sem\_op} > 0: value(\texttt{semnum}) += value(\texttt{sem\_op})
+    \item \texttt{sem\_op} = 0: if value(\texttt{semnum}) != 0; calling process blocked until semaphore is 0
+    \item \texttt{sem\_op} < 0: value(\texttt{semnum}) -= value(\texttt{sem\_op})
+        \begin{itemize}
+            \item Blocks calling process until sem value has increased to the point operation can be performed without resulting in negative value
+        \end{itemize}
+\end{itemize}
+
+\texttt{semop} can be made non-blocking if \texttt{sops[i]} is set to \texttt{IPC\_NOWAIT}. In this case, when \texttt{semop} would have blocked, it fails with error \texttt{EAGAIN} (Resource temporarily unavailable [try again later]) instead.
+
+
+\subsection{Shared memory}
+
+A shared memory segment is a kernel-managed memory segment that can be used to exchange (larger amounts of) data between attached processes. Kernel intervention is not required to use a shmem segment once attached, since it becomes part of the process's virtual address space.
+
+Shared memory syscalls implement no mutual exclusion of their own, so it is advisable to use semaphores or equivalent solutions to protect the shared memory from concurrent accesses (which can cause data corruption).
+
+
+\subsubsection{\texttt{shmget}}
+
+\begin{minted}{c}
+int shmget(key_t key, size_t size, int shmflg);
+\end{minted}
+
+Creates a new shared memory segment or obtains the identifier of an existing one. If a new segment is created, it gets initialized to 0.
+
+Returns a shared memory identifier on success, -1 on failure.
+
+\texttt{key}: IPC key
+
+\texttt{size}: Desired segment size in bytes. If we just want to get the identifier of an existing shared memory segment, this field must be $/leq$ size of the segment.
+
+\texttt{shmflg}: Bit mask specifying the permissions (Like \texttt{mode} in \texttt{open()}). The following flags can also be ORed in:
+
+\begin{itemize}
+    \item \texttt{IPC\_CREAT}: If no segment with \texttt{key} exists, create one.
+    \item \texttt{IPC\_EXCL}: Fail if \texttt{IPC\_CREAT} is being used and a shared memory segment with \texttt{key} already exists.
+\end{itemize}
+
+
+\subsubsection{\texttt{shmat}}
+
+\begin{minted}{c}
+void *shmat(int shmid, const void *shmaddr, int shmflg);
+\end{minted}
+
+Attaches shared memory segment to calling process's virtual address space.
+
+If \texttt{shmaddr} is \texttt{NULL}, the \textit{kernel} selects the suitable address to attach the segment at. \texttt{shmflg} also gets ignored.
+
+If \texttt{shmaddr} is \textbf{not} \texttt{NULL}, the segment is attached at \texttt{shmaddr} address. On top of this, is \texttt{shmflg} is \texttt{SHM\_RND}, \texttt{shmaddr} is rounded down to the nearest multiple of the constant \texttt{SHMLBA} (shared memory low boundary address).
+
+If \texttt{shmflg} is \texttt{SHM\_RDONLY}, the shared memory is attached in \textbf{read-only} mode.
+
+If \texttt{shmflg} has value 0, the shared memory is attached in \textbf{read-write} mode.
+
+
+\subsubsection{\texttt{shmdt}}
+
+\begin{minted}{c}
+int shmdt(const void *shmaddr);
+\end{minted}
+
+Detaches a shared memory segment from the calling process's virtual address space.
+
+Returns 0 on success, -1 on error.
+
+All shared memory segments are automatically detached during an \texttt{exec} and on process termination.
+
+
+\subsubsection{\texttt{shmctl}}
+
+\begin{minted}{c}
+int shmctl(int shmid, int cmd, struct shmid_ds *buf);
+\end{minted}
+
+Performs control operations on a shared memory segment.
+
+Returns 0 on success, -1 on failure.
+
+\texttt{cmd} specifies the operation to perform on shared memory segment:
+
+\begin{itemize}
+    \item \texttt{IPC\_RMID}: Mark selected segment for deletion. The segment will be deleted as soon as all processes using it have detached from it.
+    \item \texttt{IPC\_STAT}: Copy the \texttt{shmid\_ds} data structure associated with this shared memory segment to the buffer pointed by \texttt{buf}.
+    \item \texttt{IPC\_SET}: Update selected fields of the \texttt{shmid\_ds} data structure associated with this shared memory segment using values provided in the buffer pointed to by \texttt{buf}.
+\end{itemize}
+
+The kernel associates every shared memory segment with a \texttt{shmid\_ds} data structure as follows:
+
+\begin{minted}{c}
+struct shmid_ds {
+    struct ipc_perm shm_perm; /* Ownership and permissions */
+    size_t shm_segsz; /* Size of segment in bytes */
+    time_t shm_atime; /* Time of last shmat() */
+    time_t shm_dtime; /* Time of last shmdt() */
+    time_t shm_ctime; /* Time of last change */
+    pid_t shm_cpid; /* PID of creator */
+    pid_t shm_lpid; /* PID of last shmat() / shmdt() */
+    shmatt_t shm_nattch; // Number of currently attached processes
+};
+\end{minted}
+
+
+\subsection{Message queue}
+
+\subsubsection{\texttt{msgget}}
+
+\begin{minted}{c}
+int msgget(key_t key, int msgflg);
+\end{minted}
+
+Creates a new message queue, or obtains the identifier of an existing queue.
+
+Returns message queue identifier on success, -1 on failure.
+
+\texttt{msgflg} is a bit mask containing the associated permissions that also accepts:
+
+\begin{itemize}
+    \item \texttt{IPC\_CREAT}: If no message queue with \texttt{key} exists, create one.
+    \item \texttt{IPC\_EXCL}: Fail if \texttt{IPC\_CREAT} is being used and a message queue with \texttt{key} already exists.
+\end{itemize}
+
+
+\subsubsection{Message structure}
+
+A message in a message queue always follows this structure:
+
+\begin{minted}{c}
+struct mymsg {
+    long mtype; /* Message type */
+    char mtext[]; /* Message body */
+};
+
+\end{minted}
+
+\texttt{mtype} > 0.
+
+\texttt{mtext[]} is an arbitrary structure that can be whatever type the programmer decides, or omitted.
+
+\subsubsection{\texttt{msgsnd}}
+
+\begin{minted}{c}
+int msgsnd(int msqid, const void *msgp, size_t msgsz, int msgflg);
+\end{minted}
+
+Writes a message to the message queue.
+
+Returns 0 on success, -1 on failure.
+
+\texttt{msqid}: IPC id of message queue
+
+\texttt{msgp}: Address pointing to the message structure
+
+\texttt{msgsz}: Size of the message expressed by number of bytes contained in the \texttt{mtext[]} field of the message.
+
+\texttt{msgflg} can be
+
+\begin{itemize}
+    \item 0 (make operating blocking) $\rightarrow$ Block the calling process until enough space has become available to place the message on the queue
+    \item \texttt{IPC\_NOWAIT} (Return immediately if no message of the requested type is in the queue. The system call fails with \texttt{errno} set to \texttt{ENOMSG} (No message of the desired type).). In the latter case, the call fails with \texttt{EAGAIN} (Resource temporarily unavailable).
+\end{itemize}
+
+
+\subsubsection{\texttt{msgrcv}}
+
+\begin{minted}{c}
+ssize_t msgrcv(int msqid, void *msgp, size_t msgsz, long msgtype, int msgflg);
+\end{minted}
+
+Reads \textbf{and removes} a message from the message queue.
+
+Returns number of bytes copied into \texttt{msgp} on success or -1 on failure.
+
+In this case, \texttt{msgzg} expresses the maximum space available in the \texttt{mtext} field of the \texttt{msgp} buffer.
+
+\begin{itemize}
+    \item \texttt{msgtype} == 0 $\rightarrow$ The first message from the queue is removed and returned to calling process.
+    \item \texttt{msgtype} > 0 $\rightarrow$ The first message of the lowest \texttt{mtype} == modulo \texttt{msgtype} is removed and returned to the calling process.
+    \item \texttt{msgtype} < 0 $\rightarrow$ The first message of the lowest \texttt{mtype} $\leq$ modulo \texttt{msgtype} is removed and returned to the calling process.
+\end{itemize}
+
+\texttt{msgflg} is a bit mask for zero or more of these flags:
+
+\begin{itemize}
+    \item \texttt{IPC\_NOWAIT}: Fails with \texttt{ENOMSG} if no message matching \texttt{msgtype} is in the queue rather than blocking the process and waiting for it.
+    \item \texttt{MSG\_NOERROR}: By default, \texttt{msgrcv} fails if the size of \texttt{mtext} exceeds the available space. When this flag is specified, instead, the message is removed from the queue, its \texttt{mtext} field is truncated to \texttt{msgsz}.
+\end{itemize}
+
+
+\subsubsection{\texttt{msgctl}}
+
+\begin{minted}{c}
+int msgctl(int msqid, int cmd, struct msqid_ds *buf);
+\end{minted}
+
+Performs control operations on system call.
+
+Returns 0 on success, -1 on error.
+
+\texttt{cmd} specifies operation to be performed on the queue:
+
+\begin{itemize}
+    \item \texttt{IPC\_RMID}: Remove message queue. All blocked reader/writer processes are awakened and \texttt{errno} is set to \texttt{EIDRM} (Identifier removed).
+    \item \texttt{IPC\_STAT}: Copy \texttt{msqid\_ds} associated to queue to \texttt{buf}
+    \item \texttt{IPC\_SET}: Update selected fields of \texttt{msqid\_ds} using values from \texttt{buf}.
+\end{itemize}
+
+The kernel associates each message queue with a corresponding \texttt{msqid\_ds} data structure:
+
+\begin{minted}{c}
+struct msqid_ds {
+    struct ipc_perm msg_perm; /* Ownership and permissions */
+    time_t msg_stime; /* Time of last msgsnd() */
+    time_t msg_rtime; /* Time of last msgrcv() */
+    time_t msg_ctime; /* Time of last change */
+    unsigned long __msg_cbytes; /* Number of bytes in queue */
+    msgqnum_t msg_qnum; /* Number of messages in queue */
+    msglen_t msg_qbytes; /* Maximum bytes in queue */
+    pid_t msg_lspid; /* PID of last msgsnd() */
+    pid_t msg_lrpid; /* PID of last msgrcv() */
+};
+\end{minted}
+
+
+\section{Signals}
+
+A signal is a notification to a process that an event has occurred. They break normal execution flow.
+
+A signal is \textit{generated} by some event and then \textit{delivered} to some process. Until a generated signal has not been delivered yet, it's said to be \textit{pending}.
+
+Signals can terminate, stop, resume a process or have custom actions. Additionally, signals that can be caught should be handled by signal handlers, functions that run as soon as their assigned signal is caught.
+
+\begin{itemize}
+    \item Signals to \textbf{terminate} a process:
+        \begin{itemize}
+            \item \texttt{SIGTERM} (15) - Can be caught, handler expected. Gracefully terminates a process.
+            \item \texttt{SIGINT} (2) - Can be caught. Interrupts a process when the user sends the Contr-C character.
+            \item \texttt{SIGQUIT} (3) - Can be caught. Always terminates a process producing a core dump.
+            \item \texttt{SIGKILL} (9) - \textbf{Cannot be caught}. Terminates a process abruptly, without the help of a signal handler. \textbf{Use should be avoided whenever possible}: the way \texttt{SIGKILL} terminates processes is not clean, and problems may or may not arise depending on how the process is programmed. It is, however, useful to terminate non-responding processes.
+        \end{itemize}
+    \item Signals to \textbf{stop and resume} a process:
+        \begin{itemize}
+            \item \texttt{SIGSTOP} (17) - \textbf{Cannot be caught}. Always stops a process.
+            \item \texttt{SIGCONT} (19) - Can be caught. Resumes a stopped process.
+        \end{itemize}
+    \item Other \textbf{import} signals:
+        \begin{itemize}
+            \item \texttt{SIGPIPE} (13) - Can be caught. Generated when a process tries to write a PIPE.
+            \item \texttt{SIGALARM} (14) - Can be caught. Terminates a process upon expiration of a real-time timer set by a call to \textit{alarm}.
+            \item \texttt{SIGUSR1} (30) and \texttt{SIGUSR2} (31) - Can be caught. No predefined action, available for programmer-defined purposes.
+        \end{itemize}
+\end{itemize}
+
+\subsection{Signal handler}
+
+A signal handler is a function that gets called when a signal associated to it is delivered to the process.
+
+\begin{minted}{c}
+void sigHandler(int sig) {
+    /* Code for the handler */
+}
+\end{minted}
+
+\texttt{sig}: Number of signal delivered to process.
+
+
+\subsection{\texttt{signal}}
+
+\begin{minted}{c}
+#include <signal.h>
+
+typedef void (*sighandler_t)(int);
+// Returns previous signal disposition on success, or SIG_ERR on error
+sighandler_t signal(int signum, sighandler_t handler);
+\end{minted}
+
+Changes the default signal handler for a signal type (number) for the calling process.
+
+Returns the previous signal disposition on success, or the constant \texttt{SIG\_ERR} on failure.
+
+\texttt{signum}: Signal number for which we want to set a signal handler.
+
+\begin{itemize}
+    \item \texttt{handler} can be:
+        \begin{itemize}
+            \item Address of a user-defined signal
+            \item \texttt{SIG\_DFL} $\rightarrow$ the default action associated with the signal occurs
+            \item \texttt{SIG\_IGN} $\rightarrow$ The signal \texttt{signum} is ignored
+        \end{itemize}
+\end{itemize}
+
+
+\subsection{\texttt{pause} and \texttt{sleep}}
+
+Stopping the execution flow of a program is necessary to wait for incoming signals without busy waiting.
+
+\begin{minted}{c}
+int pause();
+\end{minted}
+
+\texttt{pause} suspends execution of the process until the call is interrupted by a signal handler or an unhandled signal terminates the process.
+
+It always returns -1 and sets \texttt{errno} to \texttt{EINTR} (Interrupted function call).
+
+\begin{minted}{c}
+unsigned int sleep(unsigned int seconds);
+\end{minted}
+
+\texttt{sleep} suspends execution of the calling process for \texttt{seconds} seconds or until a signal is caught.
+
+It returns 0 if it completes correctly (taking the expected amount of time), or the number of seconds it should have slept but didn't if it prematurely terminated.
+
+
+\subsection{\texttt{kill}}
+
+\begin{minted}{c}
+int kill(pid_t pid, int sig);
+\end{minted}
+
+Lets a process signal another process.
+
+Despite its name, using \texttt{kill} does not necessarily \textit{terminate} the process \texttt{pid}: it just sends that process a signal of number \texttt{sig}.
+
+It returns 0 on success, or -1 on error.
+
+\begin{itemize}
+    \item \texttt{pid} specifies one or more processes that should be signaled with \texttt{sig}:
+        \begin{itemize}
+            \item \texttt{pid} > 0 $\rightarrow$ Process with PID == \texttt{pid} is signalled
+            \item \texttt{pid} = 0 $\rightarrow$ Every process in the same process group as the calling process, including the calling process itself, is signaled.
+            \item \texttt{pid} < 0 $\rightarrow$ All processes in the process group whose ID equals the \textit{absolute} value of \texttt{pid} get signaled.
+            \item \texttt{pid} = -1 $\rightarrow$ Every process for which calling process has permission to send a signal gets signaled, \textit{except} \texttt{init} and the calling process itself.
+        \end{itemize}
+\end{itemize}
+
+
+\subsection{\texttt{alarm}}
+
+\begin{minted}{c}
+unsigned int alarm(unsigned int seconds);
+\end{minted}
+
+Arranges for a \texttt{SIGALARM} signal to be delivered to the calling process after a fixed delay of \texttt{seconds} seconds.
+
+After the time expires, a \texttt{SIGALARM} signal is sent to the calling process.
+
+Setting a timer with \texttt{alarm} overrides any previously set timers.
+
+It always succeeds. It returns the number of seconds remaining on any previously set timer, or 0 if no timer had previously been set.
+
+
+\subsection{\texttt{sigset\_t}, \texttt{sigemptyset}, \texttt{sigfillset}}
+
+The \texttt{sigset\_t} data type represents a signal set. \texttt{sigemptyset} and \texttt{sigfillset} must be used to initialize a signal set immediately after creation.
+
+\begin{minted}{c}
+#include <signal.h>
+
+typedef unsigned long sigset_t;
+
+// Both return 0 on success, or -1 on error.
+int sigemptyset(sigset_t *set);
+int sigfillset(sigset_t *set);
+\end{minted}
+
+\texttt{sigemptyset} initializes a signal set to contain \textbf{no signal}.
+\texttt{sigfillset} initializes a signal set to contain \textbf{all signals}.
+
+
+\subsubsection{\texttt{siagaddset} and \texttt{sigdelset}}
+
+Individual signals can be added to or removed from an \textit{initialized} signal set as follows. The names are self-explanatory.
+
+\begin{minted}{c}
+#include <signal.h>
+
+// Both return 0 on success, or -1 on error
+int sigaddset(sigset_t *set, int sig);
+int sigdelset(sigset_t *set, int sig);
+\end{minted}
+
+
+\subsubsection{\texttt{sigismember}}
+
+This function is useful to test a signal for membership of a set.
+
+\begin{minted}{c}
+// Returns 1 if sig is a member of set, otherwise 0
+int sigismember(const sigset_t *set, int sig);
+\end{minted}
+
+
+\subsection{\texttt{sigprocmask}}
+
+The kernel maintains for each process a \textbf{signal mask}, a set of \textit{masked} signals; in other words, a set of blocked signals that will not be delivered to the process until they are removed from this mask.
+
+\begin{minted}{c}
+// Returns 0 on success, or -1 on error
+int sigprocmask(int how, const sigset_t *set, sigset_t *oldset);
+\end{minted}
+
+\begin{itemize}
+    \item \texttt{how} determines \textit{how} \texttt{sigprocmask} changes the signal mask:
+        \begin{itemize}
+            \item \texttt{SIG\_BLOCK} $\rightarrow$ Set of blocked signals is the \textbf{union} of the current set and \texttt{set}
+            \item \texttt{SIG\_UNBLOCK} $\rightarrow$ Signals in \texttt{set} get \textbf{removed} from the signal mask
+            \item \texttt{SIG\_SETMASK} $\rightarrow$ Set of blocked signals is \textit{set to} \texttt{set}
+        \end{itemize}
+\end{itemize}
+
+If \texttt{oldset} is not null, it points to a buffer to return the previous signal mask to.
+
+If \texttt{set} is \texttt{NULL}, we can retrieve the signal mask copying it to \texttt{oldset} without making any changes.
+
+
+\section{PIPEs}
+
+A pipe is a unidirectional, sequential byte stream that resides in kernel memory and has a write end and a read end that two processes can attach to respectively.
+
+\begin{itemize}
+    \item \textbf{Unidirectional}: Data only travels from the write end, to the read end.
+    \item \textbf{Sequential}: Bytes are read from the PIPE in the exact order as they were written.
+    \item \textbf{No} concept of \textbf{message} or message \textbf{boundaries}: it's a raw data stream, blocks of data of arbitrary size can be read from the read end.
+    \item A reader attempting to read from an empty pipe will get blocked until either at least 1 byte has been written to the pipe or a no-termination signal occurs, setting \texttt{errno} to \texttt{EINTR} (Interrupted function call)
+    \item If the write-end of a pipe is closed, the reader process will see an EOF when it's done reading the remaining bytes in the PIPE.
+    \item A write is blocked until sufficient space is available in the pipe to perform the operation atomically (65536 bytes is the capacity on Linux), or a no-terminating signal occurs, setting \texttt{errno} to \texttt{EINTR}.
+    \item Writes of larger data blocks than \texttt{PIPE\_BUF} (4096 bytes large on Linux) may be broken into segments of arbitrary size smaller then \texttt{PIPE\_BUF}.
+\end{itemize}
+
+
+\subsection{\texttt{pipe}}
+
+\begin{minted}{c}
+int pipe(int filedes[2]);
+\end{minted}
+
+Creates a new PIPE.
+
+Returns 0 on success, -1 on failure.
+
+If successful, it returns two open file descriptors in the array \texttt{filedes}:
+
+\begin{itemize}
+    \item \texttt{filedes[0]} - read-end
+    \item \texttt{filedes[1]} - write-end
+\end{itemize}
+
+PIPEs are used to allow communication between \textbf{related} processes, as children inherit the parent's file descriptor table. FIFOs, also known as "named pipes", are a better match if opening a byte stream between unrelated processes is necessary.
+
+Reader and writer processes will have to perform I/O on the file descriptors as usual, using \texttt{read} and \texttt{write} system calls respectively.
+
+
+\section{FIFOs}
+
+A FIFO, much like a PIPE, is a byte stream that allows two processes to exchange bytes. FIFOs are also known as \textbf{named pipes}: in fact, the main feature that sets FIFOs aside from PIPEs is that a FIFO has a name within the filesystem and, since it \textit{is} a file, it gets treated as one. This allows communication between unrelated processes since a child does not have to inherit the file descriptor from the parent's file descriptor table, as it can simply \texttt{open} the file.
+
+\subsection{\texttt{mkfifo}}
+
+\begin{minted}{c}
+int mkfifo(const char *pathname, mode_t mode);
+\end{minted}
+
+Creates a new FIFO.
+
+\texttt{pathname}: filesystem location where FIFO is created.
+
+\texttt{mode}: Permissions for the FIFO, same as in \texttt{open}.
+
+
+\subsection{Reading from a FIFO}
+
+A FIFO is read using the \texttt{open} syscall.
+
+As \texttt{FLAGS}, it only accepts \texttt{O\_RDONLY} and \texttt{O\_WRONLY}. In fact, the only sensible use for a FIFO is to have a read end and a write end, and to attach a process to each.
+
+Opening the FIFO for reading is \textbf{blocking} until a process opens it for writing, and the other way around as well.
+
+
+\section{Contact me}
+
+If you have found any error in this document, please contact me at email address luca.brame@studenti.univr.it
+
+\end{document}
